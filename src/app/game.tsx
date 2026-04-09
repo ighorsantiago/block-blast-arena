@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Modal,
     StyleSheet,
@@ -9,14 +9,21 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { GameGrid } from '../components/GameGrid';
 import { PieceTray } from '../components/PieceTray';
 import { ScoreHeader } from '../components/ScoreHeader';
+
 import { Colors, FontSizes, Radius, Spacing } from '../constants/theme';
+
 import { useBlockBlast } from '../hooks/useBlockBlast';
+import { useHaptics } from '../hooks/useHaptics';
+import { useStats } from '../hooks/useStats';
 
 export default function GameScreen() {
     const router = useRouter();
+    const { stats, recordGame } = useStats();
+    const [isNewRecord, setIsNewRecord] = useState(false);
 
     const gridLayout = useRef<{
         x: number; y: number; width: number; height: number;
@@ -38,11 +45,41 @@ export default function GameScreen() {
         cancelDrag,
         getPreviewCells,
         formatScore,
-    } = useBlockBlast();
+    } = useBlockBlast(stats.bestScore);
+
+    const { vibrateSuccess, vibrateCombo, vibrateDrop, vibrateGameOver } = useHaptics();
 
     useEffect(() => {
         startGame();
-    }, []);
+    }, [stats.bestScore]);
+
+    // Registra partida ao game over
+    useEffect(() => {
+        if (isGameOver && score > 0) {
+            recordGame(score).then(newBest => setIsNewRecord(newBest));
+        }
+    }, [isGameOver]);
+
+    // Vibra ao eliminar linhas/colunas
+    useEffect(() => {
+        if (!lastCleared) return;
+        const total = lastCleared.rows.length + lastCleared.cols.length;
+        if (total >= 2) {
+            vibrateCombo();
+        } else {
+            vibrateSuccess();
+        }
+    }, [lastCleared]);
+
+    // Vibra ao soltar uma peça
+    useEffect(() => {
+        if (!drag) vibrateDrop();
+    }, [drag]);
+
+    // Vibra ao game over
+    useEffect(() => {
+        if (isGameOver) vibrateGameOver();
+    }, [isGameOver]);
 
     const previewCells = getPreviewCells();
 
@@ -51,6 +88,7 @@ export default function GameScreen() {
     }
 
     function handleRestart() {
+        setIsNewRecord(false);
         startGame();
     }
 
@@ -129,7 +167,7 @@ export default function GameScreen() {
                             </View>
                         </View>
 
-                        {score > 0 && score >= bestScore && (
+                        {isNewRecord && (
                             <View style={styles.newRecordBadge}>
                                 <Ionicons name="trophy-outline" size={14} color={Colors.background} />
                                 <Text style={styles.newRecordText}>NOVO RECORDE!</Text>

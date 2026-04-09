@@ -114,12 +114,12 @@ function hasAnyValidMove(grid: Grid, tray: (Piece | null)[]): boolean {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useBlockBlast() {
+export function useBlockBlast(initialBestScore: number = 0) {
     const [state, setState] = useState<GameState>({
         grid: emptyGrid(),
         tray: generateTray(),
         score: 0,
-        bestScore: 0,
+        bestScore: initialBestScore,
         combo: 0,
         isGameOver: false,
         drag: null,

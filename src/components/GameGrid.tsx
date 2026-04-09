@@ -4,9 +4,13 @@ import { DragState, GRID_SIZE, Grid } from '../hooks/useBlockBlast';
 
 const { width } = Dimensions.get('window');
 const GRID_PADDING = 16;
-const GRID_WIDTH = width - GRID_PADDING * 2;
-const CELL_SIZE = GRID_WIDTH / GRID_SIZE;
+const BORDER = 2;
 const CELL_GAP = 2;
+const GRID_WIDTH = width - GRID_PADDING * 2;
+// Espaço disponível internamente: desconta borda (x2), padding interno (x2) e gaps entre células
+const CELL_SIZE = Math.floor(
+    (GRID_WIDTH - BORDER * 2 - CELL_GAP * 2 - CELL_GAP * (GRID_SIZE - 1)) / GRID_SIZE
+);
 
 interface GameGridProps {
     grid: Grid;
@@ -19,7 +23,6 @@ interface GameGridProps {
 export function GameGrid({
     grid,
     drag,
-    previewCells,
     lastCleared,
     onLayout,
 }: GameGridProps) {
@@ -94,7 +97,7 @@ const styles = StyleSheet.create({
         width: GRID_WIDTH,
         backgroundColor: Colors.surface,
         borderRadius: Radius.md,
-        borderWidth: 2,
+        borderWidth: BORDER,
         borderColor: Colors.primary,
         padding: CELL_GAP,
         gap: CELL_GAP,
@@ -104,8 +107,8 @@ const styles = StyleSheet.create({
         gap: CELL_GAP,
     },
     cell: {
-        width: CELL_SIZE - CELL_GAP * 2,
-        height: CELL_SIZE - CELL_GAP * 2,
+        width: CELL_SIZE,
+        height: CELL_SIZE,
         borderRadius: Radius.sm,
         overflow: 'hidden',
     },

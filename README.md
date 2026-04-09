@@ -1,50 +1,155 @@
-# Welcome to your Expo app 👋
+# 🟦 Block Blast Arena
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Jogo de blocos casual para mobile — arraste peças para o grid 8×8, elimine linhas e colunas e bata seu recorde.
 
-## Get started
+Parte da família **Arena Games** de jogos mobile.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 📱 Screenshots
 
-2. Start the app
+<p align="center">
+  <img src="assets/screenshots/home.png" width="250"/>
+  <img src="assets/screenshots/game.png" width="250"/>
+  <img src="assets/screenshots/stats.png" width="250"/>
+  <img src="assets/screenshots/game-over.png" width="250"/>
+</p>
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## ✨ Funcionalidades
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Jogo
+- Grid **8×8**
+- **28 peças** diferentes: 1×1, 1×2, 1×3, 1×4, 1×5, quadrados 2×2 e 3×3, formas L, T, S/Z e cantos
+- 3 peças disponíveis por vez — nova tray gerada ao usar todas
+- **7 cores** distintas para as peças
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Interação
+- **Arrastar e soltar** com PanResponder nativo (sem bibliotecas externas)
+- Preview em tempo real da posição de encaixe enquanto arrasta
+- Preview verde quando válido, vermelho quando inválido
+- Animação de scale ao segurar a peça
 
-## Get a fresh project
+### Pontuação
+- 100 pts por linha/coluna eliminada
+- Bônus por múltiplas linhas simultâneas
+- **Multiplicador de combo** — eliminar em jogadas consecutivas
 
-When you're ready, run:
+### Feedback
+- Vibração ao soltar peça, eliminar linhas/colunas e game over
+- **Animação de limpeza** — flash dourado → fade out nas células eliminadas
+
+### Estatísticas
+- Partidas jogadas
+- Pontuação máxima (recorde)
+- Pontuação média
+- Pontuação mínima
+
+---
+
+## 🛠 Stack
+
+- **React Native** + **Expo**
+- **TypeScript**
+- **Expo Router**
+- **AsyncStorage** — persistência de estatísticas e recorde
+- **expo-haptics** — feedback tátil
+- **react-native-google-mobile-ads** — monetização
+- **Animated API** — animações nativas
+
+---
+
+## 💰 Monetização (AdMob)
+
+- **Banner** — rodapé da home e da tela de jogo
+- **Interstitial** — a cada 3 partidas iniciadas
+
+---
+
+## 🚀 Como rodar
 
 ```bash
-npm run reset-project
+# Instale as dependências
+npm install
+
+# Rode em desenvolvimento
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Build Android
 
-## Learn more
+```bash
+# APK para testes internos
+eas build --platform android --profile preview
 
-To learn more about developing your project with Expo, look at the following resources:
+# AAB para a Play Store
+eas build --platform android --profile production
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+---
 
-## Join the community
+## 📁 Estrutura
 
-Join our community of developers creating universal apps.
+```
+src/
+├── app/
+│   ├── _layout.tsx
+│   ├── index.tsx          — home com recorde e estatísticas
+│   └── game.tsx           — tela principal do jogo
+├── components/
+│   ├── GameGrid.tsx       — grid 8×8 com animações de limpeza
+│   ├── PieceTray.tsx      — 3 peças draggable com PanResponder
+│   ├── ScoreHeader.tsx    — pontuação, recorde e combo
+│   └── AdBanner.tsx       — banner AdMob
+├── constants/
+│   └── theme.ts
+├── hooks/
+│   ├── useBlockBlast.ts   — estado, drag & drop e lógica do jogo
+│   ├── useStats.ts        — estatísticas persistidas
+│   ├── useHaptics.ts      — feedback tátil
+│   └── useAdMob.ts        — interstitial
+└── utils/
+    └── pieces.ts          — definição das 28 peças e geração da tray
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+## 🎮 Como jogar
+
+1. **Segure** uma das 3 peças da bandeja inferior
+2. **Arraste** para o grid — o preview mostra onde vai encaixar
+3. **Solte** numa posição válida para encaixar a peça
+4. Quando uma **linha ou coluna** ficar completa, ela é eliminada e você pontua
+5. Eliminar múltiplas linhas na mesma jogada gera **combo** e mais pontos
+6. O jogo termina quando **nenhuma das 3 peças** couber no grid
+
+---
+
+## 🎨 Design System
+
+| Token | Valor |
+|---|---|
+| Background | `#0D0F1A` |
+| Surface | `#1A1D2E` |
+| Primary (dourado) | `#C9A84C` |
+| Secondary (roxo) | `#7B5EA7` |
+| Error (vermelho) | `#C0392B` |
+
+**Cores das peças:** dourado · roxo · azul · vermelho · verde · laranja · teal
+
+---
+
+## 📦 Dependências
+
+```bash
+npx expo install @react-native-async-storage/async-storage
+npx expo install expo-haptics
+npx expo install react-native-google-mobile-ads
+```
+
+---
+
+## 📄 Licença
+
+MIT © [ighorsantiago](https://github.com/ighorsantiago)

@@ -9,13 +9,10 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
 import { GameGrid } from '../components/GameGrid';
 import { PieceTray } from '../components/PieceTray';
 import { ScoreHeader } from '../components/ScoreHeader';
-
 import { Colors, FontSizes, Radius, Spacing } from '../constants/theme';
-
 import { useBlockBlast } from '../hooks/useBlockBlast';
 import { useHaptics } from '../hooks/useHaptics';
 import { useStats } from '../hooks/useStats';
@@ -38,6 +35,7 @@ export default function GameScreen() {
         isGameOver,
         drag,
         lastCleared,
+        clearingCells,
         startGame,
         startDrag,
         updateDrag,
@@ -115,6 +113,7 @@ export default function GameScreen() {
                     drag={drag}
                     previewCells={previewCells}
                     lastCleared={lastCleared}
+                    clearingCells={clearingCells}
                     onLayout={layout => { gridLayout.current = layout; }}
                 />
 

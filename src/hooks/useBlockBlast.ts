@@ -26,6 +26,7 @@ export interface GameState {
     isGameOver: boolean;
     drag: DragState | null;
     lastCleared: { rows: number[]; cols: number[] } | null;
+    clearingCells: Set<string>; // células em animação de limpeza "row-col"
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,6 +125,7 @@ export function useBlockBlast(initialBestScore: number = 0) {
         isGameOver: false,
         drag: null,
         lastCleared: null,
+        clearingCells: new Set(),
     });
 
     // ─── Iniciar jogo ──────────────────────────────────────────────────────────
@@ -138,6 +140,7 @@ export function useBlockBlast(initialBestScore: number = 0) {
             isGameOver: false,
             drag: null,
             lastCleared: null,
+            clearingCells: new Set(),
         }));
     }, []);
 
@@ -215,8 +218,7 @@ export function useBlockBlast(initialBestScore: number = 0) {
                 return { ...prev, drag: null };
             }
 
-            let newGrid = placePiece(prev.grid, piece.shape, previewRow, previewCol, piece.color);
-
+            const newGrid = placePiece(prev.grid, piece.shape, previewRow, previewCol, piece.color);
             const { rows, cols } = findCompletedLines(newGrid);
             const linesCleared = rows.length + cols.length;
             const newCombo = linesCleared > 0 ? prev.combo + 1 : 0;
@@ -224,30 +226,71 @@ export function useBlockBlast(initialBestScore: number = 0) {
             const newScore = prev.score + points;
             const newBest = Math.max(newScore, prev.bestScore);
 
-            if (linesCleared > 0) {
-                newGrid = clearLines(newGrid, rows, cols);
-            }
-
             const newTray = [...prev.tray] as [Piece | null, Piece | null, Piece | null];
             newTray[pieceIndex] = null;
-
             const allUsed = newTray.every(p => p === null);
             const finalTray: [Piece | null, Piece | null, Piece | null] = allUsed
                 ? generateTray()
                 : newTray;
 
-            const isGameOver = !hasAnyValidMove(newGrid, finalTray);
+            if (linesCleared === 0) {
+                // Sem linhas para limpar — aplica direto
+                const isGameOver = !hasAnyValidMove(newGrid, finalTray);
+                return {
+                    ...prev,
+                    grid: newGrid,
+                    tray: finalTray,
+                    score: newScore,
+                    bestScore: newBest,
+                    combo: newCombo,
+                    isGameOver,
+                    drag: null,
+                    lastCleared: null,
+                    clearingCells: new Set(),
+                };
+            }
 
+            // Marca células que vão ser animadas
+            const clearing = new Set<string>();
+            for (const r of rows) {
+                for (let c = 0; c < GRID_SIZE; c++) clearing.add(`${r}-${c}`);
+            }
+            for (const c of cols) {
+                for (let r = 0; r < GRID_SIZE; r++) clearing.add(`${r}-${c}`);
+            }
+
+            // Após a animação (350ms), limpa o grid de verdade
+            setTimeout(() => {
+                setState(current => {
+                    const clearedGrid = clearLines(newGrid, rows, cols);
+                    const isGameOver = !hasAnyValidMove(clearedGrid, finalTray);
+                    return {
+                        ...current,
+                        grid: clearedGrid,
+                        tray: finalTray,
+                        score: newScore,
+                        bestScore: newBest,
+                        combo: newCombo,
+                        isGameOver,
+                        drag: null,
+                        lastCleared: { rows, cols },
+                        clearingCells: new Set(),
+                    };
+                });
+            }, 350);
+
+            // Primeiro: aplica a peça e marca células animando
             return {
                 ...prev,
                 grid: newGrid,
-                tray: finalTray,
+                tray: prev.tray, // mantém a tray até a animação terminar
                 score: newScore,
                 bestScore: newBest,
                 combo: newCombo,
-                isGameOver,
+                isGameOver: false,
                 drag: null,
-                lastCleared: linesCleared > 0 ? { rows, cols } : null,
+                lastCleared: null,
+                clearingCells: clearing,
             };
         });
     }, []);

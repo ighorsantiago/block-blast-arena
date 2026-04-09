@@ -10,6 +10,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdBanner } from '../components/AdBanner';
 import { Colors, FontSizes, Radius, Spacing } from '../constants/theme';
 import { useStats } from '../hooks/useStats';
 
@@ -125,6 +126,9 @@ export default function HomeScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Banner */}
+            <AdBanner />
 
         </SafeAreaView>
     );

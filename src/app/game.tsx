@@ -9,10 +9,12 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AdBanner } from '../components/AdBanner';
 import { GameGrid } from '../components/GameGrid';
 import { PieceTray } from '../components/PieceTray';
 import { ScoreHeader } from '../components/ScoreHeader';
 import { Colors, FontSizes, Radius, Spacing } from '../constants/theme';
+import { useInterstitialAd } from '../hooks/useAdMob';
 import { useBlockBlast } from '../hooks/useBlockBlast';
 import { useHaptics } from '../hooks/useHaptics';
 import { useStats } from '../hooks/useStats';
@@ -20,6 +22,7 @@ import { useStats } from '../hooks/useStats';
 export default function GameScreen() {
     const router = useRouter();
     const { stats, recordGame } = useStats();
+    const { onGameStarted } = useInterstitialAd();
     const [isNewRecord, setIsNewRecord] = useState(false);
 
     const gridLayout = useRef<{
@@ -49,7 +52,14 @@ export default function GameScreen() {
 
     useEffect(() => {
         startGame();
+        onGameStarted();
     }, [stats.bestScore]);
+
+    function handleRestart() {
+        setIsNewRecord(false);
+        startGame();
+        onGameStarted();
+    }
 
     // Registra partida ao game over
     useEffect(() => {
@@ -83,11 +93,6 @@ export default function GameScreen() {
 
     function handleBack() {
         router.back();
-    }
-
-    function handleRestart() {
-        setIsNewRecord(false);
-        startGame();
     }
 
     function handleNewGame() {
@@ -137,6 +142,9 @@ export default function GameScreen() {
                     onDragEnd={endDrag}
                     onDragCancel={cancelDrag}
                 />
+
+                {/* Banner */}
+                <AdBanner />
 
             </View>
 

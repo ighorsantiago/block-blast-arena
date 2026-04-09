@@ -1,57 +1,149 @@
-import { Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useRef } from 'react';
+import {
+    Animated,
+    Dimensions,
+    PanResponder,
+    StyleSheet,
+    View,
+} from 'react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
 import { Piece, getPieceBounds } from '../utils/pieces';
 
 const { width } = Dimensions.get('window');
 const TRAY_WIDTH = width - 32;
 const PIECE_BOX = TRAY_WIDTH / 3 - Spacing.sm;
-const MINI_CELL = 18;
-const MINI_GAP = 2;
+const MINI_CELL = 20;
+const MINI_GAP = 3;
 
 interface PieceTrayProps {
     tray: [Piece | null, Piece | null, Piece | null];
-    selectedPiece: number | null;
-    onSelectPiece: (index: number) => void;
+    isDragging: boolean;
+    onDragStart: (index: number, x: number, y: number) => void;
+    onDragMove: (x: number, y: number) => void;
+    onDragEnd: () => void;
+    onDragCancel: () => void;
 }
 
-export function PieceTray({ tray, selectedPiece, onSelectPiece }: PieceTrayProps) {
+export function PieceTray({
+    tray,
+    isDragging,
+    onDragStart,
+    onDragMove,
+    onDragEnd,
+    onDragCancel,
+}: PieceTrayProps) {
     return (
         <View style={styles.container}>
             {tray.map((piece, index) => (
-                <TouchableOpacity
+                <DraggablePiece
                     key={index}
-                    style={[
-                        styles.pieceBox,
-                        selectedPiece === index && styles.pieceBoxSelected,
-                        piece === null && styles.pieceBoxEmpty,
-                    ]}
-                    onPress={() => piece && onSelectPiece(index)}
-                    activeOpacity={piece ? 0.8 : 1}
-                >
-                    {piece && (
-                        <PiecePreview piece={piece} isSelected={selectedPiece === index} />
-                    )}
-                </TouchableOpacity>
+                    piece={piece}
+                    index={index}
+                    isDragging={isDragging}
+                    onDragStart={onDragStart}
+                    onDragMove={onDragMove}
+                    onDragEnd={onDragEnd}
+                    onDragCancel={onDragCancel}
+                />
             ))}
         </View>
     );
 }
 
+// ─── Peça arrastável ──────────────────────────────────────────────────────────
+
+interface DraggablePieceProps {
+    piece: Piece | null;
+    index: number;
+    isDragging: boolean;
+    onDragStart: (index: number, x: number, y: number) => void;
+    onDragMove: (x: number, y: number) => void;
+    onDragEnd: () => void;
+    onDragCancel: () => void;
+}
+
+function DraggablePiece({
+    piece,
+    index,
+    isDragging,
+    onDragStart,
+    onDragMove,
+    onDragEnd,
+    onDragCancel,
+}: DraggablePieceProps) {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+    const isActiveDrag = useRef(false);
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => !!piece,
+            onMoveShouldSetPanResponder: () => !!piece,
+
+            onPanResponderGrant: (evt) => {
+                if (!piece) return;
+                isActiveDrag.current = true;
+                Animated.spring(scaleAnim, {
+                    toValue: 1.15,
+                    useNativeDriver: true,
+                    speed: 50,
+                    bounciness: 0,
+                }).start();
+                const { pageX, pageY } = evt.nativeEvent;
+                onDragStart(index, pageX, pageY);
+            },
+
+            onPanResponderMove: (evt) => {
+                if (!isActiveDrag.current) return;
+                const { pageX, pageY } = evt.nativeEvent;
+                onDragMove(pageX, pageY);
+            },
+
+            onPanResponderRelease: () => {
+                if (!isActiveDrag.current) return;
+                isActiveDrag.current = false;
+                Animated.spring(scaleAnim, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                    speed: 50,
+                    bounciness: 0,
+                }).start();
+                onDragEnd();
+            },
+
+            onPanResponderTerminate: () => {
+                if (!isActiveDrag.current) return;
+                isActiveDrag.current = false;
+                Animated.spring(scaleAnim, {
+                    toValue: 1,
+                    useNativeDriver: true,
+                    speed: 50,
+                    bounciness: 0,
+                }).start();
+                onDragCancel();
+            },
+        })
+    ).current;
+
+    return (
+        <Animated.View
+            style={[
+                styles.pieceBox,
+                !piece && styles.pieceBoxEmpty,
+                { transform: [{ scale: scaleAnim }] },
+            ]}
+            {...panResponder.panHandlers}
+        >
+            {piece && <PiecePreview piece={piece} />}
+        </Animated.View>
+    );
+}
+
 // ─── Mini preview da peça ─────────────────────────────────────────────────────
 
-function PiecePreview({
-    piece,
-    isSelected,
-}: {
-    piece: Piece;
-    isSelected: boolean;
-}) {
+function PiecePreview({ piece }: { piece: Piece }) {
     const { rows, cols } = getPieceBounds(piece.shape);
 
-    // Cria matriz do bounding box
-    const matrix = Array.from({ length: rows }, () =>
-        Array(cols).fill(false)
-    );
+    const matrix = Array.from({ length: rows }, () => Array(cols).fill(false));
     for (const [r, c] of piece.shape) {
         matrix[r][c] = true;
     }
@@ -65,14 +157,14 @@ function PiecePreview({
         <View style={styles.preview}>
             {matrix.map((row, r) => (
                 <View key={r} style={styles.previewRow}>
-                    {row.map((filled, c) => (
+                    {row.map((filled: boolean, c: number) => (
                         <View
                             key={c}
                             style={[
                                 styles.miniCell,
                                 { width: cellSize, height: cellSize },
                                 filled
-                                    ? { backgroundColor: piece.color, opacity: isSelected ? 1 : 0.85 }
+                                    ? { backgroundColor: piece.color }
                                     : { backgroundColor: 'transparent' },
                                 filled && styles.miniCellFilled,
                             ]}
@@ -84,18 +176,15 @@ function PiecePreview({
     );
 }
 
-// ─── Estilos ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         paddingHorizontal: Spacing.lg,
         gap: Spacing.sm,
     },
     pieceBox: {
-        width: PIECE_BOX,
-        height: PIECE_BOX,
+        flex: 1,
+        aspectRatio: 1,
         backgroundColor: Colors.surface,
         borderRadius: Radius.md,
         borderWidth: 1.5,
@@ -103,13 +192,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    pieceBoxSelected: {
-        borderColor: Colors.primary,
-        backgroundColor: Colors.surfaceLight,
-        transform: [{ scale: 1.06 }],
-    },
     pieceBoxEmpty: {
-        opacity: 0.3,
+        opacity: 0.25,
     },
     preview: {
         gap: MINI_GAP,

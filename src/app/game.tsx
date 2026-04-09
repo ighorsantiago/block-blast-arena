@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
     Modal,
     StyleSheet,
@@ -18,6 +18,10 @@ import { useBlockBlast } from '../hooks/useBlockBlast';
 export default function GameScreen() {
     const router = useRouter();
 
+    const gridLayout = useRef<{
+        x: number; y: number; width: number; height: number;
+    } | null>(null);
+
     const {
         grid,
         tray,
@@ -25,12 +29,13 @@ export default function GameScreen() {
         bestScore,
         combo,
         isGameOver,
-        selectedPiece,
+        drag,
         lastCleared,
         startGame,
-        selectPiece,
-        dropPiece,
-        canPlacePiece,
+        startDrag,
+        updateDrag,
+        endDrag,
+        cancelDrag,
         getPreviewCells,
         formatScore,
     } = useBlockBlast();
@@ -38,6 +43,8 @@ export default function GameScreen() {
     useEffect(() => {
         startGame();
     }, []);
+
+    const previewCells = getPreviewCells();
 
     function handleBack() {
         router.back();
@@ -67,31 +74,31 @@ export default function GameScreen() {
                 {/* Grid */}
                 <GameGrid
                     grid={grid}
-                    selectedPiece={selectedPiece}
-                    canPlacePiece={canPlacePiece}
-                    getPreviewCells={getPreviewCells}
+                    drag={drag}
+                    previewCells={previewCells}
                     lastCleared={lastCleared}
-                    onDrop={dropPiece}
+                    onLayout={layout => { gridLayout.current = layout; }}
                 />
 
                 {/* Instrução */}
                 <View style={styles.instructionRow}>
-                    {selectedPiece !== null ? (
-                        <Text style={styles.instructionText}>
-                            Toque no grid para encaixar a peça
-                        </Text>
-                    ) : (
-                        <Text style={styles.instructionText}>
-                            Selecione uma peça abaixo
-                        </Text>
-                    )}
+                    <Text style={styles.instructionText}>
+                        {drag
+                            ? drag.isValid
+                                ? '✓ Solte para encaixar'
+                                : 'Arraste para uma posição válida'
+                            : 'Segure e arraste uma peça para o grid'}
+                    </Text>
                 </View>
 
                 {/* Tray de peças */}
                 <PieceTray
                     tray={tray}
-                    selectedPiece={selectedPiece}
-                    onSelectPiece={selectPiece}
+                    isDragging={drag !== null}
+                    onDragStart={(index, x, y) => startDrag(index, x, y)}
+                    onDragMove={(x, y) => updateDrag(x, y, gridLayout.current)}
+                    onDragEnd={endDrag}
+                    onDragCancel={cancelDrag}
                 />
 
             </View>
@@ -107,7 +114,6 @@ export default function GameScreen() {
                             Não há mais espaço para as peças
                         </Text>
 
-                        {/* Score final */}
                         <View style={styles.modalScoreBox}>
                             <View style={styles.modalScoreItem}>
                                 <Text style={styles.modalScoreLabel}>PONTUAÇÃO</Text>
@@ -123,25 +129,18 @@ export default function GameScreen() {
                             </View>
                         </View>
 
-                        {/* Novo recorde */}
-                        {score >= bestScore && score > 0 && (
+                        {score > 0 && score >= bestScore && (
                             <View style={styles.newRecordBadge}>
                                 <Ionicons name="trophy-outline" size={14} color={Colors.background} />
                                 <Text style={styles.newRecordText}>NOVO RECORDE!</Text>
                             </View>
                         )}
 
-                        <TouchableOpacity
-                            style={styles.buttonPrimary}
-                            onPress={handleRestart}
-                        >
+                        <TouchableOpacity style={styles.buttonPrimary} onPress={handleRestart}>
                             <Text style={styles.buttonPrimaryText}>JOGAR NOVAMENTE</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.buttonSecondary}
-                            onPress={handleNewGame}
-                        >
+                        <TouchableOpacity style={styles.buttonSecondary} onPress={handleNewGame}>
                             <Text style={styles.buttonSecondaryText}>MENU PRINCIPAL</Text>
                         </TouchableOpacity>
 
@@ -163,8 +162,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-evenly',
         paddingVertical: Spacing.sm,
     },
-
-    // Instrução
     instructionRow: {
         alignItems: 'center',
         paddingHorizontal: Spacing.lg,
@@ -208,8 +205,6 @@ const styles = StyleSheet.create({
         letterSpacing: 1,
         textAlign: 'center',
     },
-
-    // Score no modal
     modalScoreBox: {
         flexDirection: 'row',
         backgroundColor: Colors.background,
@@ -243,8 +238,6 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.borderSubtle,
         marginHorizontal: Spacing.md,
     },
-
-    // Novo recorde
     newRecordBadge: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -260,8 +253,6 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         letterSpacing: 2,
     },
-
-    // Botões
     buttonPrimary: {
         width: '100%',
         height: 52,

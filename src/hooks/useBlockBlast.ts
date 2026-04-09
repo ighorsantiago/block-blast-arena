@@ -1,11 +1,21 @@
 import { useCallback, useState } from 'react';
-import { Piece, generateTray } from '../utils/pieces';
+import { Piece, generateTray, getPieceBounds } from '../utils/pieces';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export const GRID_SIZE = 8;
 
-export type Grid = (string | null)[][];  // null = vazio, string = cor da peça
+export type Grid = (string | null)[][];
+
+export interface DragState {
+    pieceIndex: number;
+    piece: Piece;
+    x: number;         // posição absoluta na tela
+    y: number;
+    previewRow: number | null;
+    previewCol: number | null;
+    isValid: boolean;
+}
 
 export interface GameState {
     grid: Grid;
@@ -14,8 +24,8 @@ export interface GameState {
     bestScore: number;
     combo: number;
     isGameOver: boolean;
-    selectedPiece: number | null;       // índice na tray (0, 1 ou 2)
-    lastCleared: { rows: number[]; cols: number[] } | null; // para animação
+    drag: DragState | null;
+    lastCleared: { rows: number[]; cols: number[] } | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -28,7 +38,7 @@ function cloneGrid(grid: Grid): Grid {
     return grid.map(row => [...row]);
 }
 
-function canPlace(
+export function canPlace(
     grid: Grid,
     shape: [number, number][],
     row: number,
@@ -60,15 +70,12 @@ function placePiece(
 function findCompletedLines(grid: Grid): { rows: number[]; cols: number[] } {
     const rows: number[] = [];
     const cols: number[] = [];
-
     for (let r = 0; r < GRID_SIZE; r++) {
         if (grid[r].every(cell => cell !== null)) rows.push(r);
     }
-
     for (let c = 0; c < GRID_SIZE; c++) {
         if (grid.every(row => row[c] !== null)) cols.push(c);
     }
-
     return { rows, cols };
 }
 
@@ -83,31 +90,17 @@ function clearLines(grid: Grid, rows: number[], cols: number[]): Grid {
     return newGrid;
 }
 
-function calculateScore(
-    clearedRows: number,
-    clearedCols: number,
-    combo: number
-): number {
+function calculateScore(clearedRows: number, clearedCols: number, combo: number): number {
     const linesCleared = clearedRows + clearedCols;
     if (linesCleared === 0) return 0;
-
-    // Base: 100 por linha/coluna
     let base = linesCleared * 100;
-
-    // Bônus por múltiplas linhas simultâneas
     if (linesCleared >= 2) base += linesCleared * 50;
     if (linesCleared >= 4) base += linesCleared * 100;
-
-    // Multiplicador de combo
     const comboMultiplier = 1 + combo * 0.5;
-
     return Math.floor(base * comboMultiplier);
 }
 
-function hasAnyValidMove(
-    grid: Grid,
-    tray: (Piece | null)[]
-): boolean {
+function hasAnyValidMove(grid: Grid, tray: (Piece | null)[]): boolean {
     for (const piece of tray) {
         if (!piece) continue;
         for (let r = 0; r < GRID_SIZE; r++) {
@@ -129,7 +122,7 @@ export function useBlockBlast() {
         bestScore: 0,
         combo: 0,
         isGameOver: false,
-        selectedPiece: null,
+        drag: null,
         lastCleared: null,
     });
 
@@ -143,77 +136,106 @@ export function useBlockBlast() {
             bestScore: prev.bestScore,
             combo: 0,
             isGameOver: false,
-            selectedPiece: null,
+            drag: null,
             lastCleared: null,
         }));
     }, []);
 
-    // ─── Selecionar peça ───────────────────────────────────────────────────────
+    // ─── Iniciar drag ──────────────────────────────────────────────────────────
 
-    const selectPiece = useCallback((index: number) => {
+    const startDrag = useCallback((pieceIndex: number, x: number, y: number) => {
         setState(prev => {
             if (prev.isGameOver) return prev;
-            if (prev.tray[index] === null) return prev;
+            const piece = prev.tray[pieceIndex];
+            if (!piece) return prev;
             return {
                 ...prev,
-                selectedPiece: prev.selectedPiece === index ? null : index,
+                drag: {
+                    pieceIndex,
+                    piece,
+                    x,
+                    y,
+                    previewRow: null,
+                    previewCol: null,
+                    isValid: false,
+                },
+                lastCleared: null,
             };
         });
     }, []);
 
-    // ─── Verificar se pode encaixar ────────────────────────────────────────────
+    // ─── Atualizar posição do drag ─────────────────────────────────────────────
 
-    const canPlacePiece = useCallback((row: number, col: number): boolean => {
-        const { grid, tray, selectedPiece } = state;
-        if (selectedPiece === null) return false;
-        const piece = tray[selectedPiece];
-        if (!piece) return false;
-        return canPlace(grid, piece.shape, row, col);
-    }, [state]);
-
-    // ─── Colocar peça no grid ──────────────────────────────────────────────────
-
-    const dropPiece = useCallback((row: number, col: number) => {
+    const updateDrag = useCallback((
+        x: number,
+        y: number,
+        gridLayout: { x: number; y: number; width: number; height: number } | null
+    ) => {
         setState(prev => {
-            if (prev.selectedPiece === null) return prev;
-            if (prev.isGameOver) return prev;
+            if (!prev.drag || !gridLayout) return prev;
 
-            const piece = prev.tray[prev.selectedPiece];
-            if (!piece) return prev;
+            const cellSize = gridLayout.width / GRID_SIZE;
 
-            if (!canPlace(prev.grid, piece.shape, row, col)) return prev;
+            // Calcula célula alvo — centraliza a peça no dedo
+            const { rows: pieceRows, cols: pieceCols } = getPieceBounds(prev.drag.piece.shape);
+            const offsetRow = Math.floor(pieceRows / 2);
+            const offsetCol = Math.floor(pieceCols / 2);
 
-            // Coloca a peça
-            let newGrid = placePiece(prev.grid, piece.shape, row, col, piece.color);
+            const relX = x - gridLayout.x;
+            const relY = y - gridLayout.y;
 
-            // Verifica linhas/colunas completas
+            const targetRow = Math.floor(relY / cellSize) - offsetRow;
+            const targetCol = Math.floor(relX / cellSize) - offsetCol;
+
+            const isValid = canPlace(prev.grid, prev.drag.piece.shape, targetRow, targetCol);
+
+            return {
+                ...prev,
+                drag: {
+                    ...prev.drag,
+                    x,
+                    y,
+                    previewRow: targetRow,
+                    previewCol: targetCol,
+                    isValid,
+                },
+            };
+        });
+    }, []);
+
+    // ─── Soltar peça ──────────────────────────────────────────────────────────
+
+    const endDrag = useCallback(() => {
+        setState(prev => {
+            if (!prev.drag) return prev;
+
+            const { pieceIndex, piece, previewRow, previewCol, isValid } = prev.drag;
+
+            if (!isValid || previewRow === null || previewCol === null) {
+                return { ...prev, drag: null };
+            }
+
+            let newGrid = placePiece(prev.grid, piece.shape, previewRow, previewCol, piece.color);
+
             const { rows, cols } = findCompletedLines(newGrid);
             const linesCleared = rows.length + cols.length;
-
-            // Calcula combo
             const newCombo = linesCleared > 0 ? prev.combo + 1 : 0;
-
-            // Pontua
             const points = calculateScore(rows.length, cols.length, prev.combo);
             const newScore = prev.score + points;
             const newBest = Math.max(newScore, prev.bestScore);
 
-            // Limpa linhas
             if (linesCleared > 0) {
                 newGrid = clearLines(newGrid, rows, cols);
             }
 
-            // Atualiza tray
             const newTray = [...prev.tray] as [Piece | null, Piece | null, Piece | null];
-            newTray[prev.selectedPiece] = null;
+            newTray[pieceIndex] = null;
 
-            // Se todas as peças foram usadas, gera nova tray
             const allUsed = newTray.every(p => p === null);
             const finalTray: [Piece | null, Piece | null, Piece | null] = allUsed
                 ? generateTray()
                 : newTray;
 
-            // Verifica game over
             const isGameOver = !hasAnyValidMove(newGrid, finalTray);
 
             return {
@@ -224,27 +246,28 @@ export function useBlockBlast() {
                 bestScore: newBest,
                 combo: newCombo,
                 isGameOver,
-                selectedPiece: null,
+                drag: null,
                 lastCleared: linesCleared > 0 ? { rows, cols } : null,
             };
         });
     }, []);
 
-    // ─── Preview de encaixe ────────────────────────────────────────────────────
+    // ─── Cancelar drag ─────────────────────────────────────────────────────────
 
-    const getPreviewCells = useCallback((
-        row: number,
-        col: number
-    ): { row: number; col: number }[] => {
-        const { tray, selectedPiece, grid } = state;
-        if (selectedPiece === null) return [];
-        const piece = tray[selectedPiece];
-        if (!piece) return [];
-        if (!canPlace(grid, piece.shape, row, col)) return [];
-        return piece.shape.map(([dr, dc]) => ({ row: row + dr, col: col + dc }));
-    }, [state]);
+    const cancelDrag = useCallback(() => {
+        setState(prev => ({ ...prev, drag: null }));
+    }, []);
 
-    // ─── Helpers de UI ─────────────────────────────────────────────────────────
+    // ─── Helpers ───────────────────────────────────────────────────────────────
+
+    const getPreviewCells = useCallback((): { row: number; col: number }[] => {
+        const { drag, grid } = state;
+        if (!drag || drag.previewRow === null || drag.previewCol === null || !drag.isValid) return [];
+        return drag.piece.shape.map(([dr, dc]) => ({
+            row: drag.previewRow! + dr,
+            col: drag.previewCol! + dc,
+        }));
+    }, [state.drag]);
 
     const formatScore = useCallback((score: number): string => {
         if (score >= 1000000) return `${(score / 1000000).toFixed(1)}M`;
@@ -255,9 +278,10 @@ export function useBlockBlast() {
     return {
         ...state,
         startGame,
-        selectPiece,
-        dropPiece,
-        canPlacePiece,
+        startDrag,
+        updateDrag,
+        endDrag,
+        cancelDrag,
         getPreviewCells,
         formatScore,
     };

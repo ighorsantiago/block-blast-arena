@@ -1,6 +1,6 @@
-import { Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Dimensions, StyleSheet, View } from 'react-native';
 import { Colors, Radius } from '../constants/theme';
-import { GRID_SIZE, Grid } from '../hooks/useBlockBlast';
+import { DragState, GRID_SIZE, Grid } from '../hooks/useBlockBlast';
 
 const { width } = Dimensions.get('window');
 const GRID_PADDING = 16;
@@ -10,81 +10,73 @@ const CELL_GAP = 2;
 
 interface GameGridProps {
     grid: Grid;
-    selectedPiece: number | null;
-    canPlacePiece: (row: number, col: number) => boolean;
-    getPreviewCells: (row: number, col: number) => { row: number; col: number }[];
+    drag: DragState | null;
+    previewCells: { row: number; col: number }[];
     lastCleared: { rows: number[]; cols: number[] } | null;
-    onDrop: (row: number, col: number) => void;
+    onLayout: (layout: { x: number; y: number; width: number; height: number }) => void;
 }
 
 export function GameGrid({
     grid,
-    selectedPiece,
-    canPlacePiece,
-    getPreviewCells,
+    drag,
+    previewCells,
     lastCleared,
-    onDrop,
+    onLayout,
 }: GameGridProps) {
 
-    function handleCellPress(row: number, col: number) {
-        if (selectedPiece === null) return;
-        if (canPlacePiece(row, col)) {
-            onDrop(row, col);
+    const previewSet = getPreviewSet();
+
+    function getCellColor(row: number, col: number): string | null {
+        // Preview sempre aparece quando está arrastando — válido em cor normal, inválido em vermelho
+        if (drag && previewSet.has(`${row}-${col}`)) {
+            return drag.isValid ? drag.piece.color : Colors.error;
         }
+        return grid[row][col];
     }
 
-    function getCellStyle(row: number, col: number) {
-        const value = grid[row][col];
-        const isCleared =
-            lastCleared?.rows.includes(row) || lastCleared?.cols.includes(col);
-
-        if (isCleared) {
-            return { backgroundColor: Colors.primary, opacity: 0.6 };
-        }
-
-        if (value) {
-            return { backgroundColor: value };
-        }
-
-        return { backgroundColor: Colors.gridCell };
+    function getCellOpacity(row: number, col: number): number {
+        if (drag && previewSet.has(`${row}-${col}`)) return 0.5;
+        if (lastCleared?.rows.includes(row) || lastCleared?.cols.includes(col)) return 0.4;
+        return 1;
     }
 
-    // Calcula o preview baseado no toque do usuário
-    // Para simplicidade, o preview aparece quando há peça selecionada
-    // e o jogador toca em uma célula válida
-    function getHighlightStyle(row: number, col: number) {
-        if (selectedPiece === null) return null;
-
-        // Verifica se essa célula faria parte de um drop válido na linha/col 0,0
-        // O highlight real é calculado dinamicamente via getPreviewCells
-        return null;
+    // Preview deve sobrepor células ocupadas também
+    function getPreviewSet() {
+        if (!drag || drag.previewRow === null || drag.previewCol === null) return new Set<string>();
+        return new Set(
+            drag.piece.shape.map(([dr, dc]) => `${drag.previewRow! + dr}-${drag.previewCol! + dc}`)
+        );
     }
 
     return (
-        <View style={styles.container}>
+        <View
+            style={styles.container}
+            onLayout={e => {
+                const { x, y, width, height } = e.nativeEvent.layout;
+                e.target.measure((fx, fy, w, h, px, py) => {
+                    onLayout({ x: px, y: py, width: w, height: h });
+                });
+            }}
+        >
             <View style={styles.grid}>
                 {Array.from({ length: GRID_SIZE }, (_, row) => (
                     <View key={row} style={styles.row}>
                         {Array.from({ length: GRID_SIZE }, (_, col) => {
-                            const cellStyle = getCellStyle(row, col);
-                            const canDrop = selectedPiece !== null && canPlacePiece(row, col);
+                            const color = getCellColor(row, col);
+                            const opacity = getCellOpacity(row, col);
 
                             return (
-                                <TouchableOpacity
+                                <View
                                     key={col}
                                     style={[
                                         styles.cell,
-                                        cellStyle,
-                                        canDrop && styles.cellCanDrop,
+                                        color
+                                            ? { backgroundColor: color, opacity }
+                                            : styles.cellEmpty,
                                     ]}
-                                    onPress={() => handleCellPress(row, col)}
-                                    activeOpacity={canDrop ? 0.7 : 1}
                                 >
-                                    {/* Célula preenchida com brilho interno */}
-                                    {grid[row][col] && (
-                                        <View style={styles.cellInner} />
-                                    )}
-                                </TouchableOpacity>
+                                    {color && <View style={styles.cellShine} />}
+                                </View>
                             );
                         })}
                     </View>
@@ -115,15 +107,12 @@ const styles = StyleSheet.create({
         width: CELL_SIZE - CELL_GAP * 2,
         height: CELL_SIZE - CELL_GAP * 2,
         borderRadius: Radius.sm,
-        alignItems: 'center',
-        justifyContent: 'center',
+        overflow: 'hidden',
     },
-    cellCanDrop: {
-        borderWidth: 1.5,
-        borderColor: Colors.primary,
-        opacity: 0.85,
+    cellEmpty: {
+        backgroundColor: Colors.gridCell,
     },
-    cellInner: {
+    cellShine: {
         position: 'absolute',
         top: 3,
         left: 3,

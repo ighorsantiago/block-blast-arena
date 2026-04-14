@@ -38,6 +38,7 @@ async function saveStats(stats: BlockBlastStats): Promise<void> {
 
 export function useStats() {
     const [stats, setStats] = useState<BlockBlastStats>(emptyStats());
+    const [loaded, setLoaded] = useState(false);
     const statsRef = useRef<BlockBlastStats>(emptyStats());
 
     // ─── Carregar ao montar ───────────────────────────────────────────────────
@@ -46,6 +47,7 @@ export function useStats() {
         loadStats().then(s => {
             statsRef.current = s;
             setStats(s);
+            setLoaded(true);
         });
     }, []);
 
@@ -100,6 +102,7 @@ export function useStats() {
 
     return {
         stats,
+        loaded,
         recordGame,
         resetStats,
         reloadStats,

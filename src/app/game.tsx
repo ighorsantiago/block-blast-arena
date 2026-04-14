@@ -21,9 +21,10 @@ import { useStats } from '../hooks/useStats';
 
 export default function GameScreen() {
     const router = useRouter();
-    const { stats, recordGame } = useStats();
+    const { stats, loaded: statsLoaded, recordGame } = useStats();
     const { onGameStarted } = useInterstitialAd();
     const [isNewRecord, setIsNewRecord] = useState(false);
+    const gameStarted = useRef(false);
 
     const gridLayout = useRef<{
         x: number; y: number; width: number; height: number;
@@ -50,16 +51,14 @@ export default function GameScreen() {
 
     const { vibrateSuccess, vibrateCombo, vibrateDrop, vibrateGameOver } = useHaptics();
 
+    // Inicia o jogo apenas uma vez, depois que as stats carregarem
     useEffect(() => {
-        startGame();
-        onGameStarted();
-    }, [stats.bestScore]);
-
-    function handleRestart() {
-        setIsNewRecord(false);
-        startGame();
-        onGameStarted();
-    }
+        if (statsLoaded && !gameStarted.current) {
+            gameStarted.current = true;
+            startGame();
+            onGameStarted();
+        }
+    }, [statsLoaded]);
 
     // Registra partida ao game over
     useEffect(() => {
@@ -93,6 +92,12 @@ export default function GameScreen() {
 
     function handleBack() {
         router.back();
+    }
+
+    function handleRestart() {
+        setIsNewRecord(false);
+        startGame();
+        onGameStarted();
     }
 
     function handleNewGame() {
@@ -216,8 +221,6 @@ const styles = StyleSheet.create({
         fontSize: FontSizes.xs,
         letterSpacing: 1,
     },
-
-    // Modal
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.85)',
